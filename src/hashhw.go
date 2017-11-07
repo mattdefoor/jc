@@ -34,11 +34,11 @@ func init() {
 
 	// Parse command-line flags
 	flag.IntVar(&portVar, "port", defaultPort, portUsage)
-	flag.IntVar(&portVar, "p", defaultPort, portUsage + shorthand)
+	flag.IntVar(&portVar, "p", defaultPort, portUsage+shorthand)
 	flag.BoolVar(&debugVar, "debug", defaultDebug, debugUsage)
-	flag.BoolVar(&debugVar, "d", defaultDebug, debugUsage + shorthand)
+	flag.BoolVar(&debugVar, "d", defaultDebug, debugUsage+shorthand)
 	flag.IntVar(&hashWaitVar, "hash_wait", defaultHashWait, defaultHashWaitUsage)
-	flag.IntVar(&hashWaitVar, "hw", defaultHashWait, defaultHashWaitUsage + shorthand)
+	flag.IntVar(&hashWaitVar, "hw", defaultHashWait, defaultHashWaitUsage+shorthand)
 }
 
 // Broadcast channel that is closed when the application has been gracefully
@@ -55,13 +55,13 @@ func shutdownPending() bool {
 }
 
 type entry struct {
-	id int
-    hash string
-    duration int
+	id       int
+	hash     string
+	duration int
 }
 
 type stats struct {
-	total int
+	total   int
 	average int
 }
 
@@ -72,64 +72,64 @@ var getHash = make(chan string)
 var getStats = make(chan stats)
 
 func getHashHandler() http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        if shutdownPending() {
-            http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-            return
-        }
+	return func(w http.ResponseWriter, r *http.Request) {
+		if shutdownPending() {
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
 
-        // Validate GET parameter input. If we fail to convert
-        // the GET parameter to an integer, return an error.
-        jobid, err := strconv.Atoi(r.URL.Path[len("/hash/"):])
-        if err != nil {
-            http.Error(w, "Invalid Job ID", http.StatusBadRequest)
-            return
-        }
-		
+		// Validate GET parameter input. If we fail to convert
+		// the GET parameter to an integer, return an error.
+		jobid, err := strconv.Atoi(r.URL.Path[len("/hash/"):])
+		if err != nil {
+			http.Error(w, "Invalid Job ID", http.StatusBadRequest)
+			return
+		}
+
 		getJobId <- jobid
 		select {
-			case hash := <-getHash:
-				if hash == "" {
-					http.Error(w, "Password has not been hashed", http.StatusNotFound)
-					return
-				}
-				fmt.Fprintf(w, base64.StdEncoding.EncodeToString([]byte(hash)))
+		case hash := <-getHash:
+			if hash == "" {
+				http.Error(w, "Password has not been hashed", http.StatusNotFound)
+				return
+			}
+			fmt.Fprintf(w, base64.StdEncoding.EncodeToString([]byte(hash)))
 		}
-    }
+	}
 }
 
 func postHashHandler() http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        if shutdownPending() {
-            http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-            return
-        }
+	return func(w http.ResponseWriter, r *http.Request) {
+		if shutdownPending() {
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
 
-        pw := r.PostFormValue("password")
-        if pw == "" {
+		pw := r.PostFormValue("password")
+		if pw == "" {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
-        }
+		}
 
 		jobid := <-addJobId
 		if debugVar {
 			fmt.Printf("post handler jobId = %d\n", jobid)
 		}
-		
-        // Respond immediately with the jobId.
-        fmt.Fprintf(w, strconv.Itoa(jobid))
-		
+
+		// Respond immediately with the jobId.
+		fmt.Fprintf(w, strconv.Itoa(jobid))
+
 		// TODO: Move this to the hashManager? Use a WaitGroup to keep track of how many.
 		go generateHash(jobid, []byte(pw))
-    }
+	}
 }
 
 func getStatsHandler() http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        if shutdownPending() {
-            http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-            return
-        }
+	return func(w http.ResponseWriter, r *http.Request) {
+		if shutdownPending() {
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
 		stats := <-getStats
 		jsonData := map[string]int{"total": stats.total, "average": stats.average}
 		s, err := json.Marshal(jsonData)
@@ -137,16 +137,16 @@ func getStatsHandler() http.HandlerFunc {
 			http.Error(w, "Unable to get statistics", http.StatusInternalServerError)
 			return
 		}
-        fmt.Fprintf(w, string(s))
-    }
+		fmt.Fprintf(w, string(s))
+	}
 }
 
 func main() {
 	flag.Parse()
-	
-    if debugVar {
-        fmt.Printf("Listening on port %d\n", portVar)
-    }
+
+	if debugVar {
+		fmt.Printf("Listening on port %d\n", portVar)
+	}
 
 	// Handle SIGINT and SIGTERM. You can trigger a graceful
 	// shutdown via Ctrl-C from the terminal in which we are
@@ -163,12 +163,12 @@ func main() {
 	}()
 
 	go hashManager()
-	
+
 	http.Handle("/hash/", getHashHandler())
 	http.Handle("/hash", postHashHandler())
 	http.Handle("/stats", getStatsHandler())
 
-	err := http.ListenAndServe(":" + strconv.Itoa(portVar), nil)
+	err := http.ListenAndServe(":"+strconv.Itoa(portVar), nil)
 	if err != nil {
 		log.Fatal("ListenAndServe:", err)
 		os.Exit(1)
@@ -176,9 +176,9 @@ func main() {
 }
 
 func hashManager() {
-	var jobIds int // Count of jobIds is confined to hashManager goroutine
+	var jobIds int                  // Count of jobIds is confined to hashManager goroutine
 	entries := make(map[int]string) // Map of jobIds->hashes is confined to hashManager goroutine
-	var stats stats // Stats is confined to hashManager goroutine
+	var stats stats                 // Stats is confined to hashManager goroutine
 	for {
 		select {
 		case addJobId <- jobIds:
@@ -186,11 +186,11 @@ func hashManager() {
 		case entry := <-addEntry:
 			if debugVar {
 				fmt.Printf("Entry id = %d; hash = %s; duration = %d\n", entry.id, entry.hash,
-				entry.duration)
+					entry.duration)
 			}
 			entries[entry.id] = entry.hash
 			stats.total = len(entries)
-			stats.average = (stats.average * (stats.total - 1) + entry.duration) / stats.total
+			stats.average = (stats.average*(stats.total-1) + entry.duration) / stats.total
 			if debugVar {
 				fmt.Printf("Hash average = %d\n", stats.average)
 			}
@@ -206,19 +206,19 @@ func hashManager() {
 }
 
 func generateHash(jobid int, data []byte) {
-    // Wait the appropriate amount of time specified by hashWaitVar.
-    time.Sleep(time.Duration(hashWaitVar) * time.Second)
+	// Wait the appropriate amount of time specified by hashWaitVar.
+	time.Sleep(time.Duration(hashWaitVar) * time.Second)
 
-    // New hash entry for use.
-    e := new(entry)
+	// New hash entry for use.
+	e := new(entry)
 	e.id = jobid
-	
-    // Start calculating how long it takes to generate a hash.
-    start := time.Now().UTC()
-    e.hash = fmt.Sprintf("%x", sha512.Sum512(data))
+
+	// Start calculating how long it takes to generate a hash.
+	start := time.Now().UTC()
+	e.hash = fmt.Sprintf("%x", sha512.Sum512(data))
 	end := time.Now().UTC()
-    var duration time.Duration = end.Sub(start)
-    e.duration = int(duration.Nanoseconds() % 1e6 / 1e3)
+	var duration time.Duration = end.Sub(start)
+	e.duration = int(duration.Nanoseconds() % 1e6 / 1e3)
 	if debugVar {
 		fmt.Printf("Hash generation duration = %v, %d\n", duration, e.duration)
 	}
