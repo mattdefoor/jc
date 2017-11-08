@@ -63,13 +63,13 @@ func hashHandler() http.HandlerFunc {
 		case http.MethodGet:
 			// Validate GET parameter input. If we fail to convert
 			// the GET parameter to an integer, return an error.
-			jobid, err := strconv.Atoi(r.URL.Path[len("/hash/"):])
+			jobID, err := strconv.Atoi(r.URL.Path[len("/hash/"):])
 			if err != nil {
 				http.Error(w, "Invalid Job ID", http.StatusBadRequest)
 				return
 			}
 
-			GetJobID <- jobid
+			GetJobID <- jobID
 			select {
 			case hash := <-GetHash:
 				if hash == "" {
@@ -85,16 +85,19 @@ func hashHandler() http.HandlerFunc {
 				return
 			}
 
-			jobid := <-AddJobID
+			jobID := <-AddJobID
 			if debugVar {
-				log.Printf("post handler jobId = %d\n", jobid)
+				log.Printf("Post Handler jobID = %d\n", jobID)
 			}
 
-			// Respond immediately with the jobId.
-			fmt.Fprintf(w, strconv.Itoa(jobid))
+			// Respond immediately with the jobID.
+			fmt.Fprintf(w, strconv.Itoa(jobID))
 
-			// TODO: Move this to the hashManager? Use a WaitGroup to keep track of how many.
-			go generateHash(jobid, []byte(pw))
+			// Create queuedEntry and send it to the QueueEntry channel.
+			var entry QueuedEntry
+			entry.JobID = jobID
+			entry.Data = []byte(pw)
+			QueueEntry <- entry
 		default:
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -137,15 +140,19 @@ func main() {
 		close(shutdown)
 		log.Println("Shutting down...")
 		log.Println("Waiting for outstanding hash requests to complete...")
+		WG.Wait()
+		log.Println("Outstanding hash requests finished.")
 		log.Println("Shutdown complete.")
 		os.Exit(1)
 	}()
 
-	go hashManager()
+	log.Println("Registering handlers...")
 
 	http.Handle("/hash", hashHandler())
 	http.Handle("/hash/", hashHandler())
 	http.Handle("/stats", statsHandler())
+
+	log.Println("Setting up listener...")
 
 	err := http.ListenAndServe(":"+strconv.Itoa(portVar), nil)
 	if err != nil {
