@@ -1,6 +1,6 @@
-# jc 
+# hasher 
 
-jc is an app that listens on a default port of 8080. It has the following command-line parameters:
+hasher is an app that listens on a default port of 8080. It has the following command-line parameters:
 ```
 -h  This help message
 -d	Enable debug output (shorthand)
@@ -16,11 +16,28 @@ jc is an app that listens on a default port of 8080. It has the following comman
   	Port number for HTTP listener (default 8080)
 ```
 ### Shutdown
-Once running, jc can be gracefully shutdown from the shell in which was launched via ctrl-c. It can also be shutdown by sending it the SIGINT (-2) or SIGTERM (-15) signals. For example:
+Once running, hasher can be gracefully shutdown from the shell in which was launched via ctrl-c. It can also be shutdown by sending it the SIGINT (-2) or SIGTERM (-15) signals. For example:
 ```
 kill -2 <pid>
 ```
 or
 ```
 kill -15 <pid>
+```
+### Clone
+Clone the repo:
+```
+git clone https://github.com/mattdefoor/jc.git && cd jc/hasher
+```
+### Build
+```
+go build
+```
+### Run
+```
+.\hasher
+```
+### Run Tests
+```
+go test -v
 ```
