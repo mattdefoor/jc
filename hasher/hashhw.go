@@ -2,6 +2,7 @@
 package main
 
 import (
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
@@ -10,13 +11,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strconv"
+	"sync"
 	"syscall"
+	"time"
 )
 
-var portVar int
-var debugVar bool
-var hashWaitVar int
+var (
+	portVar     int
+	debugVar    bool
+	hashWaitVar int
+	shutdown    = make(chan struct{})
+	WG          sync.WaitGroup
+)
 
 func init() {
 	// Constant defaults for command-line flag parser.
@@ -39,10 +47,6 @@ func init() {
 	flag.IntVar(&hashWaitVar, "hw", defaultHashWait, defaultHashWaitUsage+shorthand)
 }
 
-// Broadcast channel that is closed when the application has been gracefully
-// terminated.
-var shutdown = make(chan struct{})
-
 func shutdownPending() bool {
 	select {
 	case <-shutdown:
@@ -50,6 +54,26 @@ func shutdownPending() bool {
 	default:
 		return false
 	}
+}
+
+func generateHash(queuedEntry QueuedEntry) {
+	debugLog("Waiting %d seconds to generate hash for JobID = %d\n", hashWaitVar, queuedEntry.JobID)
+
+	// Wait the appropriate amount of time specified by hashWaitVar.
+	time.Sleep(time.Duration(hashWaitVar) * time.Second)
+
+	// New hash entry for use.
+	e := new(entry)
+	e.jobID = queuedEntry.JobID
+
+	// Start calculating how long it takes to generate a hash.
+	start := time.Now().UTC()
+	e.hash = fmt.Sprintf("%x", sha512.Sum512(queuedEntry.Data))
+	duration := time.Since(start)
+	e.duration = int(duration.Nanoseconds() % 1e6 / 1e3)
+	debugLog("JobID %d hash generation duration = %v, %d\n", e.jobID, duration, e.duration)
+	AddEntry <- *e
+	WG.Done()
 }
 
 func hashHandler() http.HandlerFunc {
@@ -61,9 +85,15 @@ func hashHandler() http.HandlerFunc {
 
 		switch r.Method {
 		case http.MethodGet:
+			base := path.Base(r.URL.Path)
+			if base == "." {
+				http.Error(w, "Invalid Job ID", http.StatusBadRequest)
+				return
+			}
+
 			// Validate GET parameter input. If we fail to convert
 			// the GET parameter to an integer, return an error.
-			jobID, err := strconv.Atoi(r.URL.Path[len("/hash/"):])
+			jobID, err := strconv.Atoi(base)
 			if err != nil {
 				http.Error(w, "Invalid Job ID", http.StatusBadRequest)
 				return
@@ -86,9 +116,7 @@ func hashHandler() http.HandlerFunc {
 			}
 
 			jobID := <-AddJobID
-			if debugVar {
-				log.Printf("Post Handler jobID = %d\n", jobID)
-			}
+			debugLog("Post Handler jobID = %d\n", jobID)
 
 			// Respond immediately with the jobID.
 			fmt.Fprintf(w, strconv.Itoa(jobID))
@@ -97,7 +125,8 @@ func hashHandler() http.HandlerFunc {
 			var entry QueuedEntry
 			entry.JobID = jobID
 			entry.Data = []byte(pw)
-			QueueEntry <- entry
+			WG.Add(1)
+			go generateHash(entry)
 		default:
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
@@ -158,5 +187,11 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe:", err)
 		os.Exit(1)
+	}
+}
+
+func debugLog(format string, args ...interface{}) {
+	if debugVar {
+		fmt.Printf(format, args...)
 	}
 }
